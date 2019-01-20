@@ -18,11 +18,11 @@
 
     - name: Create an ec2 instance for WordPress site.
       ec2:
-         key_name: '{{ ec2_keypair }}'
-         group: sg_wp  # security group name
-         instance_type: '{{ ec2_instance_type}}'
-         image: '{{ ec2_ami }}'
-         region: '{{ region }}'
+         key_name: "{{ ec2_keypair }}"
+         group: sg_wp  
+         instance_type: "{{ ec2_instance_type}}"
+         image: "{{ ec2_ami }}"
+         region: "{{ ec2_region }}"
          count: 1  
          wait: true
          count_tag:
@@ -33,20 +33,27 @@
          assign_public_ip: yes
          register: ec2
       
-    - name: Add all instance public IPs to host group
-      add_host: hostname={{ item.public_ip }} groups=wordpress
-      loop: "{{ ec2.instances }}"
+    - name: Add instances host group
+      add_host: 
+        hostname: "{{ item.public_ip }}" 
+        groups: wordpress
+      
+    - name: Wait for instance launch
+      delegate_to: "{{ item.public_dns_name }}"
+      wait_for_connection:
+        delay: 60
+        timeout: 320
 
     - name: Create a MySQL RDS
       rds:
           command: create
-          instance_name: '{{ rds_intance_name }}'
+          instance_name: "{{ rds_intance_name }}"
           db_engine: MySQL
           size: 10
           instance_type: db.m1.small
-          username: '{{ rds_instance_admin }}'
-          password: '{{ rdd_instance_admin_passwd }}'
-          db_name: '{{ rds_instance_db }}'
+          username: "{{ rds_instance_admin }}"
+          password: "{{ rdd_instance_admin_passwd }}"
+          db_name: "{{ rds_instance_db }}"
           license_model: general-public-license
           size: 20
           wait: yes
@@ -54,13 +61,17 @@
           Environment: Dev
           Application: cms
 
+    - name : Create a CloudFront distribution      
+      cloudfront_distribution:
+        state: present
+        default_origin_domain_name: "{{ item.public_dns_name }}"
+        
 
-
-- hosts: wordpress
-  name: Instlling WordPress and Apache
-  user: ec2-user
-  gather_facts: true
-  remote_user: root          
+- name: Instlling WordPress and Apache
+  hosts: wordpress
+  become: Yes
+  remote_user: ec2-user
+  gather_facts: true  
           
   tasks:
           
@@ -68,7 +79,13 @@
       yum: 
         name: httpd 
         state: latest
-        update_cache: yes        
+        update_cache: yes
+
+    - name: enable Apache
+      systemd:
+        name: httpd
+        enabled: yes
+        masked: no        
 
     - name: Download WordPress
       get_url: 
@@ -86,9 +103,9 @@
         src: /tmp/wordpress/
         dest: /var/www/html
      
-    - name: Copying the WordPress config with Jinja2 paramters
+    - name: Copying the WordPress config with Jinja2 parameters
       template: 
-        src: /opt/templates/wp-config.j2 
+        src: wp-config.j2 
         dest: /var/www/html/
                 
     - name: Restart Apache service after config change
