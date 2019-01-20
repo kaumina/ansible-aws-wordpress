@@ -1,10 +1,10 @@
 ---
 - hosts: localhost
-  name: Install WordPress site in ec2 using RDS
+  name: Playbook for installing WordPress site in ec2 using RDS enabled CloudFront.
   gather_facts: False
 
   vars:
-       rds_intance_host : '{{ rds.instance.endpoint }}'
+       rds_intance_host : "{{ rds.instance.endpoint }}"
        rds_intance_name: wordpressdb
        rds_instance_db: wordpress
        rds_instance_admin: mysql_admin
