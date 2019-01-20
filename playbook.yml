@@ -1,0 +1,104 @@
+---
+- hosts: localhost
+  name: Install WordPress site in ec2 using RDS
+  gather_facts: False
+
+  vars:
+       rds_intance_host : '{{ rds.instance.endpoint }}'
+       rds_intance_name: wordpressdb
+       rds_instance_db: wordpress
+       rds_instance_admin: mysql_admin
+       rds_instance_admin_passwd: 1qaz2wsx@
+       ec2_region: us-east-1
+       ec2_instance_type: t2.medium
+       ec2_ami: ami-25bd2743  
+       ec2_keypair: wp_pem 
+       
+  tasks:
+
+    - name: Create an ec2 instance for WordPress site.
+      ec2:
+         key_name: '{{ ec2_keypair }}'
+         group: sg_wp  # security group name
+         instance_type: '{{ ec2_instance_type}}'
+         image: '{{ ec2_ami }}'
+         region: '{{ region }}'
+         count: 1  
+         wait: true
+         count_tag:
+            Name: WordPress
+         instance_tags:
+            Name: WordPress
+         vpc_subnet_id: subnet-cef59af4
+         assign_public_ip: yes
+         register: ec2
+      
+    - name: Add all instance public IPs to host group
+      add_host: hostname={{ item.public_ip }} groups=wordpress
+      loop: "{{ ec2.instances }}"
+
+    - name: Create a MySQL RDS
+      rds:
+          command: create
+          instance_name: '{{ rds_intance_name }}'
+          db_engine: MySQL
+          size: 10
+          instance_type: db.m1.small
+          username: '{{ rds_instance_admin }}'
+          password: '{{ rdd_instance_admin_passwd }}'
+          db_name: '{{ rds_instance_db }}'
+          license_model: general-public-license
+          size: 20
+          wait: yes
+          tags:
+          Environment: Dev
+          Application: cms
+
+
+
+- hosts: wordpress
+  name: Instlling WordPress and Apache
+  user: ec2-user
+  gather_facts: true
+  remote_user: root          
+          
+  tasks:
+          
+    - name: Installing the updated Apache
+      yum: 
+        name: httpd 
+        state: latest
+        update_cache: yes        
+
+    - name: Download WordPress
+      get_url: 
+        url: https://wordpress.org/latest.tar.gz 
+        dest: /tmp/
+  
+    - name: Extract WordPress archive
+      unarchive: 
+        src: /tmp/latest.tar.gz 
+        dest: /tmp/
+        remote_src: yes
+      
+    - name: Copy WordPress contents to webserver root directory
+      copy:
+        src: /tmp/wordpress/
+        dest: /var/www/html
+     
+    - name: Copying the WordPress config with Jinja2 paramters
+      template: 
+        src: /opt/templates/wp-config.j2 
+        dest: /var/www/html/
+                
+    - name: Restart Apache service after config change
+      service: 
+      name: httpd 
+      enabled: yes
+      notify:
+        - restart apache
+  handlers:
+    - name: restart apache
+      service: 
+        name: httpd 
+        state: restarted
