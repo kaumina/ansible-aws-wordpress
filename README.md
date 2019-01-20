@@ -3,7 +3,7 @@ This Playbook uses ec2 and rds services to install WordPress site. Apache is use
 This is supposed to be basically for dev environment.
 
 # Prerequisites:
-Make sure to make available below packages in your Ansible Box. 
+Make sure to make available below packages in your Ansible Box. Configure boto with required AWS access and secret keys.
 
 
 * boto
